@@ -40,15 +40,60 @@ export function registerRoutes(app: FastifyInstance) {
     })
 
     // listar todas refeicoes de um usuario
+    app.get('/user/:id/metrics', async (req: FastifyRequest, res: FastifyReply) => {
+        const userId = Number(req.params.id)
+        const {rows , count} = await Meal.findAndCountAll({
+            where: {
+                userId: userId},
+            order: [['datetime', 'ASC']]
+            })
+
+        const totalMealsInDiet = rows.filter(meal => meal.isDiet == true);
+        const totalMealsOutDiet = count - totalMealsInDiet.length;
+        const bestSequenceInDiet = totalMealsInDiet.reduce((acc, currentMeal, index, meals) => {
+            if (index === 0) {
+                return { current: 1, best: 1 };
+            }
+    
+            const previousMeal = meals[index - 1];
+            const currentMealDate = new Date(currentMeal.datetime);
+            const previousMealDate = new Date(previousMeal.datetime);
+    
+            const isConsecutive = currentMealDate.getDate() === previousMealDate.getDate() &&
+                                  currentMealDate.getMonth() === previousMealDate.getMonth() &&
+                                  currentMealDate.getFullYear() === previousMealDate.getFullYear();
+    
+            if (isConsecutive) {
+                acc.current++;
+                acc.best = Math.max(acc.best, acc.current);
+            } else {
+                acc.current = 1;
+            }
+    
+            return acc;
+        }, { current: 1, best: 1 }).best;
+
+
+        const userMetrics = {
+            totalMeals: count,
+            totalMealsInDiet: totalMealsInDiet.length,
+            totalMealsOutDiet,
+            bestSequenceInDiet
+        }
+        
+        res.send(userMetrics)
+    } )
+
     app.get('/user/:id/meals', async (req: FastifyRequest, res: FastifyReply) => {
-        const userId = Number(req.params.id);
-        const userMeals = await Meal.findAll({
+        const userId = Number(req.params.id)
+        const response = await Meal.findAll({
             where: {
                 userId: userId
-        }})
-        
-        res.send(userMeals)
-    } )
+            }
+        })
+
+        res.send(response)
+    })
 
     // registrar refeicao
     app.post('/meal', async (req: FastifyRequest, res: FastifyReply) => {
@@ -82,6 +127,15 @@ export function registerRoutes(app: FastifyInstance) {
     // visualizar unica refeicao
     app.get('/meal/:id', async (req: FastifyRequest, res:FastifyReply) => {
         const response = await Meal.findByPk(req.params.id)
+        res.send(response)
+    })
+
+    app.delete('/meal/:id', async (req: FastifyRequest, res: FastifyReply) => {
+        const response = await Meal.destroy({
+            where: {
+                id: req.params.id
+            }
+        })
         res.send(response)
     })
 }
